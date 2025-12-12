@@ -228,7 +228,7 @@ class tokenizer:
                 new_symbols=[]
                 i=0
                 while i<len(symbols):
-                    if (i<len(symbols)-1 and symbols[i], symbols[i+1])==best_pair:
+                    if i<len(symbols)-1 and (symbols[i], symbols[i+1])==best_pair:
                         new_symbols.append(symbols[i]+ symbols[i+1])
                         i+=2
                     else:
