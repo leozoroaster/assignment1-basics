@@ -55,7 +55,11 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-
+    from cs336_basics.lm_blocks import Embedding
+    model = Embedding(vocab_size, d_model)
+    with torch.no_grad():
+        model.W.copy_(weights)
+    return model(token_ids)
     raise NotImplementedError
 
 

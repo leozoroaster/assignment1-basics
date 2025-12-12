@@ -28,7 +28,7 @@ class Embedding(nn.Module):
     nn.init.trunc_normal_(self.W,0,self.std,-3*self.std,3*self.std)
 
   def forward(self,id_tensor):
-    return self.W[id_tensor]*math.sqrt(self.embedding_dim)
+    return self.W[id_tensor]#*math.sqrt(self.embedding_dim)
 
 class RMSnorm(nn.Module):
   def __init__(self, d_model: int, eps: float = 1e-5, device=None, dtype=None):
