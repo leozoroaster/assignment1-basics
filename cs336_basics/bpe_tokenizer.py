@@ -75,12 +75,12 @@ class BPETokenizer:
         words_pair_count: Dict[bytes,Dict[(int,int),int]] = {}
         for word in word_set:
             word_ids=word_to_ids[word]
+            words_pair_count[word] = {}
             if len(word_ids)>1:
-                words_pair_count[word] = {}
                 for i in range(len(word_ids)-1):
                     pair=(word_ids[i],word_ids[i+1])
                     pair_count[pair]=pair_count.get(pair,0)+word_count[word]
-                    words_pair_count[word][pair]=words_pair_count[word].get(word,0)+1
+                    words_pair_count[word][pair]=words_pair_count[word].get(pair,0)+1
         for pair,count in pair_count.items():
             heap_item=(-count,self.vocab_dict[pair[0]],self.vocab_dict[pair[1]])
             heapq.heappush(heap,heap_item)
@@ -171,7 +171,3 @@ class BPETokenizer:
                     word_to_ids[word]=new_word_ids
 
         return self.vocab_dict, self.merges, self.merges_rank
-
-
-
-
