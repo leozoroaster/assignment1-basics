@@ -201,45 +201,58 @@ class tokenizer:
         return pairs
 
     def encode(self, text: str) -> list[int]:
-        words = re.findall(PAT, text)
+
         output_ids = []
 
-        for word in words:
-            word_bytes = word.encode("utf-8")
-            symbols = [bytes([b]) for b in word_bytes]
+        if self.special_tokens:
+            sorted_special_tokens = sorted(self.special_tokens, key=len, reverse=True)
+            special_pattern = f"({'|'.join(re.escape(s) for s in sorted_special_tokens)})"
+            word_chunks = re.split(special_pattern, text)
+        else:
+            word_chunks = [text]
 
-            if not symbols:
+        for chunk in word_chunks:
+
+            if self.special_tokens is not None and chunk in self.special_tokens:
+                output_ids.append(self.vocab_inverse[chunk.encode("utf-8")])
                 continue
 
-            pairs=self.get_pairs(symbols)
+            words_in_bytes=pre_tokenize(chunk)
+            for word in words_in_bytes:
+                symbols = [bytes([b]) for b in word]
 
-            while True:
-                best_pair=None
-                best_rank=None
-                for pair in pairs:
-                    rank=self.merge_ranks.get(pair)
-                    if rank is not None and (best_rank is None or rank<best_rank):
-                        best_rank=rank
-                        best_pair=pair
+                if not symbols:
+                    continue
 
-                if best_pair is None:
-                    break
-
-                new_symbols=[]
-                i=0
-                while i<len(symbols):
-                    if i<len(symbols)-1 and (symbols[i], symbols[i+1])==best_pair:
-                        new_symbols.append(symbols[i]+ symbols[i+1])
-                        i+=2
-                    else:
-                        new_symbols.append(symbols[i])
-                        i+=1
-
-                symbols=new_symbols
                 pairs=self.get_pairs(symbols)
 
-            for b in symbols:
-                output_ids.append(self.vocab_inverse[b])
+                while True:
+                    best_pair=None
+                    best_rank=None
+                    for pair in pairs:
+                        rank=self.merge_ranks.get(pair)
+                        if rank is not None and (best_rank is None or rank<best_rank):
+                            best_rank=rank
+                            best_pair=pair
+
+                    if best_pair is None:
+                        break
+
+                    new_symbols=[]
+                    i=0
+                    while i<len(symbols):
+                        if i<len(symbols)-1 and (symbols[i], symbols[i+1])==best_pair:
+                            new_symbols.append(symbols[i]+ symbols[i+1])
+                            i+=2
+                        else:
+                            new_symbols.append(symbols[i])
+                            i+=1
+
+                    symbols=new_symbols
+                    pairs=self.get_pairs(symbols)
+
+                for b in symbols:
+                    output_ids.append(self.vocab_inverse[b])
 
         return output_ids
 
@@ -249,10 +262,8 @@ class tokenizer:
                 yield token_id
 
     def decode(self, ids: list[int]) -> str:
-        chunks = []
-        for num in ids:
-            chunks.append(self.vocab[num])
-        return b"".join(chunks).decode("utf-8")
+        all_bytes=b"".join(self.vocab[num] for num in ids)
+        return all_bytes.decode("utf-8", errors="replace")
 
     @classmethod
     def from_files(cls, vocab_filepath, merges_filepath, special_tokens=None):
