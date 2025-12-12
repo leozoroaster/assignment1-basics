@@ -29,6 +29,11 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
 
+    from cs336_basics.lm_blocks import Linear
+    model=Linear(d_out,d_in)
+    with torch.no_grad():
+        model.W.copy_(weights)
+    return model(in_features)
     raise NotImplementedError
 
 
