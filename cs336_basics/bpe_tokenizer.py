@@ -16,7 +16,20 @@ class Node:
         self.prev=None
         self.next=None
 
-class BPETokenizer:
+class PairItem:
+    def __init__(self,count,first_b,second_b):
+        self.count=count
+        self.first_b=first_b
+        self.second_b=second_b
+
+    def __lt__(self,other):
+        if self.count != other.count:
+            return self.count>other.count
+        if self.first_b != other.first_b:
+            return self.first_b>other.first_b
+        return self.second_b>other.second_b
+
+class tokenizer_training:
     def __init__(self,vocab_size: int, special_tokens: list[str]):
         #useful data structures
         self.vocab_size = vocab_size
@@ -25,7 +38,6 @@ class BPETokenizer:
         self.vocab_dict: Dict[int, bytes] = {}
         self.vocab_dict_reverse: Dict[bytes, int] = {}
         self.merges: List[Tuple[bytes,bytes]] = []
-        self.merges_rank: Dict[Tuple[bytes,bytes], int] = {}
 
         #initialize vocab dicts
         for i in range(256):
@@ -72,29 +84,31 @@ class BPETokenizer:
         #initialize pairs
         heap=[]
         pair_count: Dict[(int,int),int] = {}
-        words_pair_count: Dict[bytes,Dict[(int,int),int]] = {}
+        pair_to_words: Dict[(int,int),Set[bytes]] = {}
         for word in word_set:
             word_ids=word_to_ids[word]
-            words_pair_count[word] = {}
             if len(word_ids)>1:
                 for i in range(len(word_ids)-1):
                     pair=(word_ids[i],word_ids[i+1])
                     pair_count[pair]=pair_count.get(pair,0)+word_count[word]
-                    words_pair_count[word][pair]=words_pair_count[word].get(pair,0)+1
+                    if pair in pair_to_words.keys():
+                        pair_to_words[pair].add(word)
+                    else:
+                        pair_to_words[pair]={word}
         for pair,count in pair_count.items():
-            heap_item=(-count,self.vocab_dict[pair[0]],self.vocab_dict[pair[1]])
+            heap_item=PairItem(count,self.vocab_dict[pair[0]],self.vocab_dict[pair[1]])
             heapq.heappush(heap,heap_item)
 
         #merging
-        merge_rank=0
         while len(self.vocab_dict)<self.vocab_size:
             #find the best pair and update global stuff
             found=False
             while heap:
-                neg_count, bytes_1, bytes_2 = heapq.heappop()
+                curr_item=heapq.heappop(heap)
+                count, bytes_1, bytes_2 = curr_item.count,curr_item.first_b,curr_item.second_b
                 new_bytes = bytes_1 + bytes_2
                 new_pair = (self.vocab_dict_reverse[bytes_1], self.vocab_dict_reverse[bytes_2])
-                if -neg_count==pair_count.get(new_pair, 0):
+                if count==pair_count.get(new_pair, 0) and count>0:
                     found=True
                     break
             if not found:
@@ -102,72 +116,162 @@ class BPETokenizer:
             self.vocab_dict[len(self.vocab_dict)] = new_bytes
             self.vocab_dict_reverse[new_bytes] = len(self.vocab_dict_reverse)
             self.merges.append((bytes_1,bytes_2))
-            self.merges_rank[(bytes_1, bytes_2)]=merge_rank
             new_id=self.vocab_dict_reverse[new_bytes]
-            merge_rank+=1
 
-            #merge the words and update word_to_ids and heap and words_pair_count and pair_count
-            for word in word_set:
-                if new_pair in words_pair_count[word].keys():
-                    affected_pairs = set()
-                    break_points = []
-                    word_ids=word_to_ids[word]
-                    i=0
-                    while i<len(word_ids)-1:
-                        curr_pair=(word_ids[i],word_ids[i+1])
-                        if curr_pair==new_pair:
-                            break_points.append(i)
-
-                            pair_count[new_pair]-=word_count[word]
-                            affected_pairs.add(new_pair)
-                            words_pair_count[word][new_pair]-=1
-                            if words_pair_count[word][new_pair]==0:
-                                words_pair_count[word].pop(new_pair)
-
-                            if i>0:
-                                prev_pair=(word_ids[i-1],word_ids[i])
-                                pair_count[prev_pair] -= word_count[word]
-                                affected_pairs.add(prev_pair)
-                                words_pair_count[word][prev_pair] -= 1
-                                if words_pair_count[word][prev_pair] == 0:
-                                    words_pair_count[word].pop(prev_pair)
-
-                                new_prev_pair=(word_ids[i-1],new_id)
-                                pair_count[new_prev_pair] = pair_count.get(new_prev_pair,0)+ word_count[word]
-                                affected_pairs.add(new_prev_pair)
-                                words_pair_count[word][new_prev_pair]=words_pair_count[word].get(new_prev_pair,0)+1
-
-                            if i+2<len(word_ids):
-                                next_pair=(word_ids[i+1],word_ids[i+2])
-                                pair_count[next_pair] -= word_count[word]
-                                affected_pairs.add(next_pair)
-                                words_pair_count[word][next_pair] -= 1
-                                if words_pair_count[word][next_pair] == 0:
-                                    words_pair_count[word].pop(next_pair)
-
-                                new_next_pair = (new_id, word_ids[i+2])
-                                pair_count[new_next_pair] = pair_count.get(new_next_pair, 0) + word_count[word]
-                                affected_pairs.add(new_next_pair)
-                                words_pair_count[word][new_next_pair] = words_pair_count[word].get(new_next_pair, 0) + 1
-
-                            i+=2
-                        else:
-                            i+=1
-
-                    for pair in affected_pairs:
-                        new_item=(-pair_count[pair],self.vocab_dict[pair[0]],self.vocab_dict[pair[1]])
-                        if -pair_count[pair]>0:
-                            heapq.heappush(heap,new_item)
-
-                    new_word_ids=word_ids[:break_points[0]]
-                    for i in range(len(break_points)-1):
-                        s=break_points[i]
-                        t=break_points[i+1]
+            #merge the words and update word_to_ids and heap and pair_to_words and pair_count
+            candidates=pair_to_words[new_pair].copy()
+            for word in candidates:
+                word_ids=word_to_ids[word]
+                if len(word_to_ids[word])<2:
+                    continue
+                new_word_ids=[]
+                i=0
+                while i <len(word_ids)-1:
+                    curr_pair=(word_ids[i],word_ids[i+1])
+                    if curr_pair==new_pair:
                         new_word_ids.append(new_id)
-                        new_word_ids+=word_ids[s+2:t]
-                    new_word_ids.append(new_id)
-                    new_word_ids+=word_ids[break_points[-1]+2:]
+                        i+=2
+                    else:
+                        new_word_ids.append(word_ids[i])
+                        i+=1
+                if i==len(word_ids)-1:
+                    new_word_ids.append(word_ids[i])
 
-                    word_to_ids[word]=new_word_ids
+                #update word_to_ids
+                word_to_ids[word]=new_word_ids
 
-        return self.vocab_dict, self.merges, self.merges_rank
+                #count old and new pairs
+                old_pair_count = {}
+                new_pair_count = {}
+                affected_pairs=set()
+                for i in range(len(word_ids)-1):
+                    curr_pair = (word_ids[i], word_ids[i+1])
+                    old_pair_count[curr_pair]= old_pair_count.get(curr_pair,0) +1
+                for i in range(len(new_word_ids)-1):
+                    curr_pair = (new_word_ids[i], new_word_ids[i+1])
+                    new_pair_count[curr_pair]= new_pair_count.get(curr_pair,0) +1
+
+                #update pair_to_words and pair_count
+                for pair, count in old_pair_count.items():
+                    if pair not in new_pair_count.keys():
+                        affected_pairs.add(pair)
+                        pair_to_words[pair].remove(word)
+                        pair_count[pair]-= count*word_count[word]
+                    else:
+                        if new_pair_count[pair]!=count:
+                            affected_pairs.add(pair)
+                            pair_count[pair] += word_count[word]*(new_pair_count[pair]-count)
+
+                for pair, count in new_pair_count.items():
+                    if pair not in old_pair_count.keys():
+                        affected_pairs.add(pair)
+                        if pair in pair_to_words.keys():
+                            pair_to_words[pair].add(word)
+                        else:
+                            pair_to_words[pair]={word}
+                        pair_count[pair] = pair_count.get(pair,0)+ word_count[word] * count
+
+                #update heap
+                for pair in affected_pairs:
+                    new_item=PairItem(pair_count[pair],self.vocab_dict[pair[0]],self.vocab_dict[pair[1]])
+                    heapq.heappush(heap,new_item)
+
+        return self.vocab_dict, self.merges
+
+class tokenizer:
+    def __init__(self, vocab, merges, special_tokens=None):
+        self.vocab=vocab
+        self.merges=merges
+        self.special_tokens=special_tokens
+        self.merge_ranks = {pair: i for i, pair in enumerate(self.merges)}
+        self.vocab_inverse={v:k for k,v in self.vocab.items()}
+
+        if self.special_tokens is not None:
+            special_tokens_bytes = set([token.encode("utf-8") for token in self.special_tokens])
+
+            for byte_token in special_tokens_bytes:
+                if byte_token not in self.vocab.values():
+                    self.vocab[len(self.vocab)] = byte_token
+
+    def get_pairs(self, symbols):
+        """Return set of adjacent symbol pairs in the current word."""
+        pairs = set()
+        for i in range(len(symbols) - 1):
+            pairs.add((symbols[i], symbols[i + 1]))
+        return pairs
+
+    def encode(self, text: str) -> list[int]:
+        words = re.findall(PAT, text)
+        output_ids = []
+
+        for word in words:
+            word_bytes = word.encode("utf-8")
+            symbols = [bytes([b]) for b in word_bytes]
+
+            if not symbols:
+                continue
+
+            pairs=self.get_pairs(symbols)
+
+            while True:
+                best_pair=None
+                best_rank=None
+                for pair in pairs:
+                    rank=self.merge_ranks.get(pair)
+                    if rank is not None and (best_rank is None or rank<best_rank):
+                        best_rank=rank
+                        best_pair=pair
+
+                if best_pair is None:
+                    break
+
+                new_symbols=[]
+                i=0
+                while i<len(symbols):
+                    if (i<len(symbols)-1 and symbols[i], symbols[i+1])==best_pair:
+                        new_symbols.append(symbols[i]+ symbols[i+1])
+                        i+=2
+                    else:
+                        new_symbols.append(symbols[i])
+                        i+=1
+
+                symbols=new_symbols
+                pairs=self.get_pairs(symbols)
+
+            for b in symbols:
+                output_ids.append(self.vocab_inverse[b])
+
+        return output_ids
+
+    def encode_iterable(self, iterable):
+        for chunk in iterable:
+            for token_id in self.encode(chunk):
+                yield token_id
+
+    def decode(self, ids: list[int]) -> str:
+        chunks = []
+        for num in ids:
+            chunks.append(self.vocab[num])
+        return b"".join(chunks).decode("utf-8")
+
+    @classmethod
+    def from_files(cls, vocab_filepath, merges_filepath, special_tokens=None):
+        vocab_dict = dict()
+        with open(vocab_filepath, 'r', encoding='utf-8') as f:
+            for line in f:
+                curr_combo = line.strip().split('\t')
+                if len(curr_combo) == 2:
+                    curr_id = int(curr_combo[0])
+                    curr_bytes = bytes.fromhex(curr_combo[1])
+                    vocab_dict[curr_id] = curr_bytes
+
+        merges = []
+        with open(merges_filepath, 'r', encoding='utf-8') as f:
+            for line in f:
+                curr_combo = line.strip().split('\t')
+                if len(curr_combo) == 2:
+                    curr_bytes_1 = bytes.fromhex(curr_combo[0])
+                    curr_bytes_2 = bytes.fromhex(curr_combo[1])
+                    merges.append((curr_bytes_1, curr_bytes_2))
+
+        return cls(vocab_dict, merges, special_tokens)
