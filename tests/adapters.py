@@ -158,7 +158,7 @@ def run_multihead_self_attention(
     """
     from cs336_basics.lm_blocks import multihead_self_attention
     max_seq_len=in_features.shape[-2]
-    model=multihead_self_attention(d_model, num_heads, theta=10000, max_seq_len=max_seq_len)
+    model=multihead_self_attention(d_model, num_heads, max_seq_len=max_seq_len)
     with torch.no_grad():
         model.WQ.W.copy_(q_proj_weight)
         model.WK.W.copy_(k_proj_weight)
@@ -205,6 +205,14 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
+    from cs336_basics.lm_blocks import multihead_self_attention
+    model = multihead_self_attention(d_model, num_heads, max_seq_len=max_seq_len, theta=theta)
+    with torch.no_grad():
+        model.WQ.W.copy_(q_proj_weight)
+        model.WK.W.copy_(k_proj_weight)
+        model.WV.W.copy_(v_proj_weight)
+        model.WO.W.copy_(o_proj_weight)
+    return model(in_features)
     raise NotImplementedError
 
 
@@ -304,6 +312,19 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
+    from cs336_basics.lm_blocks import transformer_block
+    model = transformer_block(d_model, num_heads, d_ff, theta, max_seq_len)
+    with torch.no_grad():
+        model.layer_1.g.copy_(weights["ln1.weight"])
+        model.layer_2.WQ.W.copy_(weights["attn.q_proj.weight"])
+        model.layer_2.WK.W.copy_(weights["attn.k_proj.weight"])
+        model.layer_2.WV.W.copy_(weights["attn.v_proj.weight"])
+        model.layer_2.WO.W.copy_(weights["attn.output_proj.weight"])
+        model.layer_3.g.copy_(weights["ln2.weight"])
+        model.layer_4.W1.copy_(weights["ffn.w1.weight"])
+        model.layer_4.W2.copy_(weights["ffn.w2.weight"])
+        model.layer_4.W3.copy_(weights["ffn.w3.weight"])
+    return model(in_features)
     raise NotImplementedError
 
 
@@ -386,6 +407,22 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
+    from cs336_basics.lm_blocks import transformer_lm
+    model = transformer_lm(d_model, num_heads, d_ff, vocab_size, context_length, num_layers, rope_theta)
+    with torch.no_grad():
+        model.embedding_layer.W.copy_(weights["token_embeddings.weight"])
+        #TBD
+        for n in range(num_layers):
+            model.attention_blocks[n].WQ.W.copy_(weights["layers.{num_layers}.attn.q_proj.weight"])
+        model.layer_2.WQ.W.copy_(weights["attn.q_proj.weight"])
+        model.layer_2.WK.W.copy_(weights["attn.k_proj.weight"])
+        model.layer_2.WV.W.copy_(weights["attn.v_proj.weight"])
+        model.layer_2.WO.W.copy_(weights["attn.output_proj.weight"])
+        model.layer_3.g.copy_(weights["ln2.weight"])
+        model.layer_4.W1.copy_(weights["ffn.w1.weight"])
+        model.layer_4.W2.copy_(weights["ffn.w2.weight"])
+        model.layer_4.W3.copy_(weights["ffn.w3.weight"])
+    return model(in_features)
     raise NotImplementedError
 
 

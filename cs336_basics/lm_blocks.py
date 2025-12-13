@@ -124,7 +124,7 @@ def scaled_dot_product_attention(q,k,v,mask=None):
   return x @ v
 
 class multihead_self_attention(nn.Module):
-  def __init__(self,d_model:int,h:int,theta:float,max_seq_len:int,device=None, dtype=None):
+  def __init__(self,d_model:int,h:int,max_seq_len:int, theta: float = 0.0,device=None, dtype=None):
     super().__init__()
     self.d_model=d_model
     self.h=h
@@ -140,7 +140,8 @@ class multihead_self_attention(nn.Module):
     self.WV=Linear(self.d_model,self.d_model,device=device, dtype=dtype)
     self.WO=Linear(self.d_model,self.d_model,device=device, dtype=dtype)
 
-    self.rope=RoPE(self.theta, self.d_k, self.max_seq_len, device=device)
+    if self.theta>0:
+        self.rope=RoPE(self.theta, self.d_k, self.max_seq_len, device=device)
 
   def forward(self,x,mask=None):
     q=self.WQ(x)
@@ -157,8 +158,9 @@ class multihead_self_attention(nn.Module):
     token_positions = torch.arange(seq_len,device=q.device, dtype=torch.long)
     token_positions = token_positions.view(*([1] * (q.ndim - 2)),seq_len).expand(*q.shape[:-1])
 
-    q=self.rope(q,token_positions)
-    k=self.rope(k,token_positions)
+    if self.theta > 0:
+        q=self.rope(q,token_positions)
+        k=self.rope(k,token_positions)
 
     if mask is None:
       # Causal lower-triangular mask on the SAME device as Q, bool dtype
@@ -181,7 +183,7 @@ class transformer_block(nn.Module):
     self.max_seq_len=max_seq_len
     self.mask=mask
     self.layer_1=RMSnorm(self.d_model,device=device, dtype=dtype)
-    self.layer_2=multihead_self_attention(self.d_model,self.h,self.theta,self.max_seq_len,device=device, dtype=dtype)
+    self.layer_2=multihead_self_attention(self.d_model,self.h,self.max_seq_len,self.theta, device=device, dtype=dtype)
     self.layer_3=RMSnorm(self.d_model,device=device, dtype=dtype)
     self.layer_4=positionwise_feedforward(self.d_model,self.d_ff,device=device, dtype=dtype)
 
