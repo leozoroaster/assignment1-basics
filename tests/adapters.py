@@ -92,6 +92,13 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
+    from cs336_basics.lm_blocks import positionwise_feedforward
+    model = positionwise_feedforward(d_model,d_ff)
+    with torch.no_grad():
+        model.W1.copy_(w1_weight)
+        model.W2.copy_(w2_weight)
+        model.W3.copy_(w3_weight)
+    return model(in_features)
     raise NotImplementedError
 
 
@@ -113,6 +120,8 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
+    from cs336_basics.lm_blocks import scaled_dot_product_attention
+    return scaled_dot_product_attention(Q,K,V,mask)
     raise NotImplementedError
 
 
@@ -147,6 +156,15 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
+    from cs336_basics.lm_blocks import multihead_self_attention
+    max_seq_len=in_features.shape[-2]
+    model=multihead_self_attention(d_model, num_heads, theta=10000, max_seq_len=max_seq_len)
+    with torch.no_grad():
+        model.WQ.W.copy_(q_proj_weight)
+        model.WK.W.copy_(k_proj_weight)
+        model.WV.W.copy_(v_proj_weight)
+        model.WO.W.copy_(o_proj_weight)
+    return model(in_features)
     raise NotImplementedError
 
 
@@ -209,6 +227,10 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
+    from cs336_basics.lm_blocks import RoPE
+    rope = RoPE(theta,d_k,max_seq_len)
+    return rope(in_query_or_key, token_positions)
+
     raise NotImplementedError
 
 
@@ -387,6 +409,11 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
+    from cs336_basics.lm_blocks import RMSnorm
+    model=RMSnorm(d_model,eps)
+    with torch.no_grad():
+        model.g.copy_(weights)
+    return model(in_features)
     raise NotImplementedError
 
 
@@ -440,6 +467,8 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
+    from cs336_basics.lm_blocks import softmax
+    return softmax(in_features, dim)
     raise NotImplementedError
 
 

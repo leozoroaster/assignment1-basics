@@ -154,7 +154,7 @@ class multihead_self_attention(nn.Module):
     k=k.view(*old_shape,self.h,self.d_k).transpose(-3,-2)
     v=v.view(*old_shape,self.h,self.d_k).transpose(-3,-2)
 
-    token_positions = torch.arange(seq_len,dtype=torch.long)
+    token_positions = torch.arange(seq_len,device=q.device, dtype=torch.long)
     token_positions = token_positions.view(*([1] * (q.ndim - 2)),seq_len).expand(*q.shape[:-1])
 
     q=self.rope(q,token_positions)
@@ -162,9 +162,7 @@ class multihead_self_attention(nn.Module):
 
     if mask is None:
       # Causal lower-triangular mask on the SAME device as Q, bool dtype
-      mask = torch.tril(
-          torch.ones(seq_len, seq_len, device=q.device, dtype=torch.bool)
-      )
+      mask = torch.tril(torch.ones(seq_len, seq_len, device=q.device, dtype=torch.bool))
       mask = mask.view(1, 1, seq_len, seq_len)
 
     scores=scaled_dot_product_attention(q,k,v,mask)
