@@ -286,3 +286,25 @@ class tokenizer:
                     merges.append((curr_bytes_1, curr_bytes_2))
 
         return cls(vocab_dict, merges, special_tokens)
+
+    def save_tokenizer(vocab: dict[int, bytes],
+                       merges: list[tuple[bytes, bytes]],
+                       vocab_filepath: str,
+                       merges_filepath: str):
+        """Save vocab and merges to disk in the format expected by bpe_tokenizer.from_files."""
+        vocab_filepath = Path(vocab_filepath)
+        merges_filepath = Path(merges_filepath)
+
+        # Make sure directory exists
+        vocab_filepath.parent.mkdir(parents=True, exist_ok=True)
+        merges_filepath.parent.mkdir(parents=True, exist_ok=True)
+
+        # Save vocab: id<TAB>hex
+        with open(vocab_filepath, "w", encoding="utf-8") as f:
+            for idx, byte_seq in sorted(vocab.items(), key=lambda x: x[0]):
+                f.write(f"{idx}\t{byte_seq.hex()}\n")
+
+        # Save merges: hex1<TAB>hex2
+        with open(merges_filepath, "w", encoding="utf-8") as f:
+            for (b1, b2) in merges:
+                f.write(f"{b1.hex()}\t{b2.hex()}\n")

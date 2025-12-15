@@ -413,16 +413,18 @@ def run_transformer_lm(
         model.embedding_layer.W.copy_(weights["token_embeddings.weight"])
         #TBD
         for n in range(num_layers):
-            model.attention_blocks[n].WQ.W.copy_(weights["layers.{num_layers}.attn.q_proj.weight"])
-        model.layer_2.WQ.W.copy_(weights["attn.q_proj.weight"])
-        model.layer_2.WK.W.copy_(weights["attn.k_proj.weight"])
-        model.layer_2.WV.W.copy_(weights["attn.v_proj.weight"])
-        model.layer_2.WO.W.copy_(weights["attn.output_proj.weight"])
-        model.layer_3.g.copy_(weights["ln2.weight"])
-        model.layer_4.W1.copy_(weights["ffn.w1.weight"])
-        model.layer_4.W2.copy_(weights["ffn.w2.weight"])
-        model.layer_4.W3.copy_(weights["ffn.w3.weight"])
-    return model(in_features)
+            model.attention_blocks[n].layer_1.g.copy_(weights[f"layers.{n}.ln1.weight"])
+            model.attention_blocks[n].layer_2.WQ.W.copy_(weights[f"layers.{n}.attn.q_proj.weight"])
+            model.attention_blocks[n].layer_2.WK.W.copy_(weights[f"layers.{n}.attn.k_proj.weight"])
+            model.attention_blocks[n].layer_2.WV.W.copy_(weights[f"layers.{n}.attn.v_proj.weight"])
+            model.attention_blocks[n].layer_2.WO.W.copy_(weights[f"layers.{n}.attn.output_proj.weight"])
+            model.attention_blocks[n].layer_3.g.copy_(weights[f"layers.{n}.ln2.weight"])
+            model.attention_blocks[n].layer_4.W1.copy_(weights[f"layers.{n}.ffn.w1.weight"])
+            model.attention_blocks[n].layer_4.W2.copy_(weights[f"layers.{n}.ffn.w2.weight"])
+            model.attention_blocks[n].layer_4.W3.copy_(weights[f"layers.{n}.ffn.w3.weight"])
+        model.norm_layer.g.copy_(weights["ln_final.weight"])
+        model.linear_layer.W.copy_(weights["lm_head.weight"])
+    return model(in_indices)
     raise NotImplementedError
 
 
@@ -488,6 +490,8 @@ def run_get_batch(
         is the sampled input sequences, and the second tuple item is the corresponding
         language modeling labels.
     """
+    from cs336_basics.data_process import data_loading
+    return data_loading(dataset, batch_size, context_length, device)
     raise NotImplementedError
 
 
@@ -524,6 +528,8 @@ def run_cross_entropy(
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
+    from cs336_basics.optimizer import cross_entropy
+    return cross_entropy(inputs, targets)
     raise NotImplementedError
 
 
@@ -536,6 +542,8 @@ def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm:
 
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
+    from cs336_basics.optimizer import grad_clip
+    return grad_clip(parameters, max_l2_norm)
     raise NotImplementedError
 
 
@@ -543,6 +551,8 @@ def get_adamw_cls() -> Any:
     """
     Returns a torch.optim.Optimizer that implements AdamW.
     """
+    from cs336_basics.optimizer import AdamW
+    return AdamW
     raise NotImplementedError
 
 
@@ -571,6 +581,8 @@ def run_get_lr_cosine_schedule(
     Returns:
         Learning rate at the given iteration under the specified schedule.
     """
+    from cs336_basics.optimizer import cosine_annealing_schedule
+    return cosine_annealing_schedule(it, max_learning_rate, min_learning_rate, warmup_iters, cosine_cycle_iters)
     raise NotImplementedError
 
 
@@ -590,6 +602,9 @@ def run_save_checkpoint(
             we've completed.
         out (str | os.PathLike | BinaryIO | IO[bytes]): Path or file-like object to serialize the model, optimizer, and iteration to.
     """
+    from cs336_basics.data_process import save_checkpoint
+    save_checkpoint(model, optimizer, iteration, out)
+    return
     raise NotImplementedError
 
 
@@ -611,6 +626,8 @@ def run_load_checkpoint(
     Returns:
         int: the previously-serialized number of iterations.
     """
+    from cs336_basics.data_process import load_checkpoint
+    return load_checkpoint(src, model, optimizer)
     raise NotImplementedError
 
 
