@@ -47,13 +47,8 @@ def train_model_TinyStories(d_model=512,h=16,d_ff=1344,vocab_size=10000,context_
 
     if not (vocab_file.exists() and merges_file.exists()):
         print("Tokenizer not found — training BPE")
-        bpe_text=dataset["train"]["text"]
-        bpe_text_path = data_dir / "TinyStories_100k.txt"
-        with open(bpe_text_path, "w", encoding="utf-8") as f:
-            f.write("\n".join(bpe_text))
-        print("text saving successful")
         tok = bpe_tokenizer.tokenizer_training(vocab_size, ["<|endoftext|>"])
-        vocab, merges = tok.train_tokenizer(str(bpe_text_path))
+        vocab, merges = tok.train_tokenizer(str(text_path))
         print("training BPE successful")
 
         bpe_tokenizer.tokenizer.save_tokenizer(vocab, merges, str(vocab_file), str(merges_file))

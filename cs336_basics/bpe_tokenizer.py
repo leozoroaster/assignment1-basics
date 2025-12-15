@@ -193,13 +193,6 @@ class tokenizer:
                 if byte_token not in self.vocab.values():
                     self.vocab[len(self.vocab)] = byte_token
 
-    def get_pairs(self, symbols):
-        """Return set of adjacent symbol pairs in the current word."""
-        pairs = set()
-        for i in range(len(symbols) - 1):
-            pairs.add((symbols[i], symbols[i + 1]))
-        return pairs
-
     def encode(self, text: str) -> list[int]:
 
         output_ids = []
@@ -211,6 +204,8 @@ class tokenizer:
         else:
             word_chunks = [text]
 
+        saved_word: Dict[bytes, List[int]] = dict()
+
         for chunk in word_chunks:
 
             if self.special_tokens is not None and chunk in self.special_tokens:
@@ -219,17 +214,27 @@ class tokenizer:
 
             words_in_bytes=pre_tokenize(chunk)
             for word in words_in_bytes:
+                if word in saved_word:
+                    output_ids += saved_word[word]
+                    continue
+
                 symbols = [bytes([b]) for b in word]
 
                 if not symbols:
                     continue
 
-                pairs=self.get_pairs(symbols)
+                pair_counts: Dict[(bytes,bytes), int] = dict()
+                for i in range(len(symbols) - 1):
+                    curr_pair=(symbols[i], symbols[i + 1])
+                    if curr_pair in pair_counts:
+                        pair_counts[curr_pair]+=1
+                    else:
+                        pair_counts[curr_pair] = 1
 
                 while True:
                     best_pair=None
                     best_rank=None
-                    for pair in pairs:
+                    for pair in pair_counts:
                         rank=self.merge_ranks.get(pair)
                         if rank is not None and (best_rank is None or rank<best_rank):
                             best_rank=rank
@@ -240,19 +245,41 @@ class tokenizer:
 
                     new_symbols=[]
                     i=0
-                    while i<len(symbols):
-                        if i<len(symbols)-1 and (symbols[i], symbols[i+1])==best_pair:
-                            new_symbols.append(symbols[i]+ symbols[i+1])
-                            i+=2
+                    while i<len(symbols)-1:
+                        if (symbols[i], symbols[i+1])==best_pair:
+                            new_bytes=symbols[i]+ symbols[i+1]
+                            pair_counts[best_pair]-=1
+                            if pair_counts[best_pair]==0:
+                                pair_counts.pop(best_pair)
+                            if i>0:
+                                prev_pair=(symbols[i-1], symbols[i])
+                                pair_counts[prev_pair]-=1
+                                if pair_counts[prev_pair] == 0:
+                                    pair_counts.pop(prev_pair)
+                                new_prev_pair=(symbols[i-1], new_bytes)
+                                pair_counts[new_prev_pair]=pair_counts.get(new_prev_pair,0)+1
+
+                            if i<len(symbols)-2:
+                                next_pair = (symbols[i + 1], symbols[i+2])
+                                pair_counts[next_pair] -= 1
+                                if pair_counts[next_pair] == 0:
+                                    pair_counts.pop(next_pair)
+                                new_next_pair = (new_bytes, symbols[i+2])
+                                pair_counts[new_next_pair] = pair_counts.get(new_next_pair,0) + 1
+
+                            new_symbols=symbols[:i]
+                            new_symbols.append(new_bytes)
+                            new_symbols.extend(symbols[i+2:])
+                            symbols=new_symbols
+                            break
                         else:
-                            new_symbols.append(symbols[i])
                             i+=1
 
-                    symbols=new_symbols
-                    pairs=self.get_pairs(symbols)
-
+                word_ids=[]
                 for b in symbols:
-                    output_ids.append(self.vocab_inverse[b])
+                    word_ids.append(self.vocab_inverse[b])
+                saved_word[word]=word_ids
+                output_ids+=word_ids
 
         return output_ids
 
