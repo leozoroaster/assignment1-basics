@@ -32,8 +32,11 @@ def save_checkpoint(model,optimizer,iteration,out):
   obj["iteration"]=iteration
   torch.save(obj,out)
 
-def load_checkpoint(src,model,optimizer):
-    checkpoint = torch.load(src)
+def load_checkpoint(src,model,optimizer, device=None):
+    if device is not None:
+        checkpoint = torch.load(src, map_location=torch.device(device))
+    else:
+        checkpoint = torch.load(src)
 
     # Load model weights
     model.load_state_dict(checkpoint['model_weights'])
