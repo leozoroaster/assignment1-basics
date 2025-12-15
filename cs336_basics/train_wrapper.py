@@ -24,7 +24,7 @@ def process_line(line: str) -> np.ndarray:
     token_ids.append(_end_id)  # one <|endoftext|> per story
     return np.array(token_ids, dtype=np.int32)
 
-def train_model_TinyStories(d_model=512,h=16,d_ff=1344,vocab_size=10000,context_length=256,num_layers=4,theta=10000,raw_lr=1e-3,decay=1e-4,epoch_num=20,batch_num=256,batch_size=64,data_dir="data", save_dir="checkpoints",device=None):
+def train_model_TinyStories(d_model=512,h=16,d_ff=1344,vocab_size=10000,context_length=256,num_layers=4,theta=10000,raw_lr=1e-3,decay=1e-4,epoch_num=100,batch_num=256,batch_size=64,data_dir="data", save_dir="checkpoints",device=None):
     data_dir = Path(data_dir)
     save_dir = Path(save_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
